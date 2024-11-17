@@ -5,6 +5,7 @@ import com.nihalsoft.passman.EntryParser;
 import com.nihalsoft.passman.model.Entry;
 import com.nihalsoft.passman.model.MetaData;
 
+import javax.crypto.BadPaddingException;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.util.Arrays;
@@ -12,7 +13,7 @@ import java.util.Arrays;
 public class EntryFile extends RandomAccessFile implements AutoCloseable {
 
 	private long index = 0;
-	private long noOfRecords = 0;
+	private long totalRecords = 0;
 	private MetaData metaData;
 
 	public EntryFile(String fileName, String mode, char[] password) throws IOException {
@@ -26,12 +27,14 @@ public class EntryFile extends RandomAccessFile implements AutoCloseable {
 
 		try {
 
-			noOfRecords = (this.length() - MetaData.SIZE) / Entry.SIZE;
-
+			totalRecords = (this.length() - MetaData.SIZE) / Entry.SIZE;
 			byte[] dec = AESUtil.decrypt(getMetadataBytes(), password);
 			this.metaData = new MetaData(password, Arrays.copyOfRange(dec, 0, 16), Arrays.copyOfRange(dec, 16, 28));
 
 		} catch (Exception e) {
+			if (e instanceof BadPaddingException) {
+				throw new RuntimeException("Incorrect password");
+			}
 			throw new RuntimeException(e);
 		}
 
@@ -39,11 +42,11 @@ public class EntryFile extends RandomAccessFile implements AutoCloseable {
 
 	public void create() throws IOException {
 		this.seek(0);
-		this.write(this.metaData.toBytes());
+		this.write(EntryParser.getInstance().encryptMetaData(metaData));
 	}
 
 	public boolean hasNext() {
-		return index < noOfRecords;
+		return index < totalRecords;
 	}
 
 	public byte[] next() throws IOException {
@@ -91,7 +94,7 @@ public class EntryFile extends RandomAccessFile implements AutoCloseable {
 		byte[] bytes = EntryParser.getInstance().toBytes(entry, metaData);
 		this.seek(getPos(pos));
 		this.write(bytes);
-		this.noOfRecords++;
+		this.totalRecords++;
 	}
 
 	public void write(byte[] entry, int pos) throws IOException {
@@ -106,7 +109,7 @@ public class EntryFile extends RandomAccessFile implements AutoCloseable {
 
 	public void purge() throws IOException {
 
-		int rec = -1;
+		int rec = 0;
 		while (this.hasNext()) {
 			byte[] rowData = this.next();
 			if (rowData[0] == 0)
@@ -114,8 +117,7 @@ public class EntryFile extends RandomAccessFile implements AutoCloseable {
 			rec++;
 		}
 
-		if (rec == -1) {
-			System.out.println("No more records to purge");
+		if (rec == totalRecords) {
 			return;
 		}
 
@@ -127,9 +129,15 @@ public class EntryFile extends RandomAccessFile implements AutoCloseable {
 			rec++;
 		}
 
-		this.noOfRecords = rec;
+		this.totalRecords = rec;
 		long newLength = MetaData.SIZE + ((long) rec * Entry.SIZE);
 		this.setLength(newLength);
+		moveFirst();
+	}
+
+	public void moveFirst() throws IOException {
+		this.index = 0;
+		this.seek(0);
 	}
 
 	public void resetPassword(char[] password) throws IOException {
@@ -144,8 +152,9 @@ public class EntryFile extends RandomAccessFile implements AutoCloseable {
 			idx++;
 		}
 		this.seek(0);
-		this.write(md.toBytes());
+		this.write(EntryParser.getInstance().encryptMetaData(metaData));
 		this.metaData = md;
+		this.moveFirst();
 	}
 
 	@Override

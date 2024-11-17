@@ -91,6 +91,14 @@ public class EntryParser {
 		}
 	}
 
+	public byte[] encryptMetaData(MetaData metaData) {
+		try {
+			return AESUtil.encrypt(metaData.toBytes(), metaData.getPassword());
+		} catch (Exception e) {
+			throw new RuntimeException(e);
+		}
+	}
+
 	private String _trim(String str, int limit) {
 		return str.substring(0, Math.min(limit, str.length()));
 	}

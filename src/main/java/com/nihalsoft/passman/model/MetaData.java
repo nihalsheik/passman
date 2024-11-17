@@ -1,7 +1,5 @@
 package com.nihalsoft.passman.model;
 
-import com.nihalsoft.passman.AESUtil;
-
 import java.nio.ByteBuffer;
 import java.security.SecureRandom;
 
@@ -44,18 +42,11 @@ public class MetaData {
 	}
 
 	public byte[] toBytes() {
-		try {
-			return AESUtil.encrypt(
-					ByteBuffer
-							.allocate(MetaData.SIZE - 1)
-							.put(salt)
-							.put(iv)
-							.array()
-					, password
-			);
-		} catch (Exception e) {
-			throw new RuntimeException(e);
-		}
+		return ByteBuffer
+				.allocate(MetaData.SIZE - 1)
+				.put(salt)
+				.put(iv)
+				.array();
 	}
 
 }

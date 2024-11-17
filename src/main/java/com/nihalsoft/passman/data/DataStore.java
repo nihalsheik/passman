@@ -15,7 +15,7 @@ public class DataStore {
 
 	private static volatile DataStore INSTANCE = null;
 
-	private Map<String, Integer> entries;
+	private Map<String, Integer> indexMap;
 	private String fileName;
 	private char[] password;
 
@@ -51,7 +51,7 @@ public class DataStore {
 		this.password = password;
 
 		try (var file = openFile("rw")) {
-			entries = new LinkedHashMap<>();
+			indexMap = new LinkedHashMap<>();
 			file.create();
 			Util.println(fileName + " created successfully");
 		} catch (Exception e) {
@@ -69,25 +69,19 @@ public class DataStore {
 
 		try (var file = openFile("rw")) {
 
-			entries = new LinkedHashMap<>();
-			int delEntries = 0;
+			indexMap = new LinkedHashMap<>();
 			int totalEntries = 0;
 
 			while (file.hasNext()) {
 				byte[] rowData = file.next();
-				if (rowData[0] == 0) {
-					System.out.println(totalEntries);
-					delEntries++;
-				} else {
-					entries.put(EntryParser.getInstance().getName(rowData), totalEntries);
+				if (rowData[0] != 0) {
+					indexMap.put(EntryParser.getInstance().getName(rowData), totalEntries);
 				}
 				totalEntries++;
 			}
 
-			Util.println(entries.size() + " - Entries Loaded");
-			if (delEntries > 0) {
-				Util.println(delEntries + " - Deleted entries");
-			}
+			Util.println(indexMap.size() + " - Entries Loaded");
+
 		} catch (Exception e) {
 			this.close();
 			throw new RuntimeException(e);
@@ -95,7 +89,7 @@ public class DataStore {
 	}
 
 	public boolean entryExist(String name) {
-		return entries.containsKey(name);
+		return indexMap.containsKey(name);
 	}
 
 
@@ -104,12 +98,12 @@ public class DataStore {
 		if (entry.getName().isEmpty()) {
 			throw new RuntimeException("Invalid entry name");
 		}
-		if (entries.containsKey(entry.getName())) {
+		if (indexMap.containsKey(entry.getName())) {
 			throw new RuntimeException("Entry already exist");
 		}
 		try (var file = openFile("rw")) {
 			file.write(entry);
-			entries.put(entry.getName(), entries.size());
+			indexMap.put(entry.getName(), indexMap.size());
 		}
 	}
 
@@ -117,7 +111,7 @@ public class DataStore {
 		checkEntryAvailability(entry.getName());
 		//TODO: Trim ?
 		try (var file = openFile("rw")) {
-			file.write(entry, entries.get(entry.getName()));
+			file.write(entry, indexMap.get(entry.getName()));
 		}
 	}
 
@@ -126,8 +120,8 @@ public class DataStore {
 		checkEntryAvailability(name);
 		try (var file = openFile("rw")) {
 			byte[] data = new byte[Entry.SIZE];
-			file.write(data, entries.get(name));
-			entries.remove(name);
+			file.write(data, indexMap.get(name));
+			indexMap.remove(name);
 			Util.println("Deleted successfully");
 		}
 	}
@@ -135,22 +129,22 @@ public class DataStore {
 	public void rename(String name, String newName) throws Exception {
 		checkEntryAvailability(name);
 		try (var file = openFile("rw")) {
-			int idx = entries.get(name);
+			int idx = indexMap.get(name);
 			byte[] rowData = file.get(idx);
 			System.arraycopy(newName.getBytes(), 0, rowData, 0, newName.length());
 			file.write(rowData, idx);
-			entries.remove(name);
-			entries.put(newName, idx);
+			indexMap.remove(name);
+			indexMap.put(newName, idx);
 			Util.println("Renamed to " + newName);
 		}
 	}
 
 	public Entry getEntry(String name) {
-		if (!entries.containsKey(name)) {
+		if (!indexMap.containsKey(name)) {
 			throw new RuntimeException("Entry not found");
 		}
 		try (var file = openFile("rw")) {
-			return file.getEntry(entries.get(name));
+			return file.getEntry(indexMap.get(name));
 		} catch (Exception e) {
 			throw new RuntimeException(e);
 		}
@@ -160,9 +154,10 @@ public class DataStore {
 		try (var file = openFile("rw")) {
 			file.purge();
 			int counter = 0;
+			indexMap = new LinkedHashMap<>();
 			while (file.hasNext()) {
 				byte[] rowData = file.next();
-				entries.put(EntryParser.getInstance().getName(rowData), counter++);
+				indexMap.put(EntryParser.getInstance().getName(rowData), counter++);
 			}
 		} catch (Exception e) {
 			throw new RuntimeException(e);
@@ -170,7 +165,7 @@ public class DataStore {
 	}
 
 	public Set<String> getEntryNames() {
-		return entries.keySet();
+		return indexMap.keySet();
 	}
 
 	public void resetPassword(char[] password) throws IOException {
@@ -180,12 +175,12 @@ public class DataStore {
 	}
 
 	public void close() {
-		this.entries = null;
+		this.indexMap = null;
 		this.fileName = null;
 	}
 
 	private void checkEntryAvailability(String name) {
-		if (!entries.containsKey(name)) {
+		if (!indexMap.containsKey(name)) {
 			throw new RuntimeException("Entry not found");
 		}
 	}
