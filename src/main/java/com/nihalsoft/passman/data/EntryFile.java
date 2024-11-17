@@ -118,6 +118,7 @@ public class EntryFile extends RandomAccessFile implements AutoCloseable {
 		}
 
 		if (rec == totalRecords) {
+			moveFirst();
 			return;
 		}
 
