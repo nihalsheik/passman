@@ -19,7 +19,7 @@ public class TaskFactory {
 
 			case CREATE, LOAD, RESETPASS, PURGE, CLOSE, INFO -> new FileTask();
 
-			case LIST, GET -> new GetTask();
+			case LIST, GET, GETPASS -> new GetTask();
 
 			default -> throw new IllegalStateException("Unexpected value: " + taskName);
 		};

@@ -34,14 +34,14 @@ public class EntryTask implements Task {
 					return;
 				}
 				if (cmd.equals(Command.RENAME)) {
-					String newName = System.console().readLine("%11s%-12s  [20] : ", " ", "New name");
+					String newName = System.console().readLine("%12s%-12s  [20] : ", " ", "New name");
 					//DataStore.getInstance().rename(name, newName);
 					return;
 				}
 				Util.displayEntry(e);
 				break;
 			case ADD:
-				name = System.console().readLine("%11s%-12s  [20] : ", " ", "Name");
+				name = System.console().readLine("%12s%-12s  [20] : ", " ", "Name");
 				if (name.isEmpty()) {
 					throw new Exception("Invalid entry name");
 				}
@@ -51,11 +51,17 @@ public class EntryTask implements Task {
 				break;
 		}
 
-		String un = System.console().readLine("%11s%-12s  [30] : ", " ", "Username");
-		String pw = System.console().readLine("%11s%-12s  [30] : ", " ", "Password");
-		String no = System.console().readLine("%11s%-12s [100] : ", " ", "Notes");
+		String un = System.console().readLine("%12s%-12s  [30] : ", " ", "Username");
+		String pw = System.console().readLine("%12s%-12s  [30] : ", " ", "Password");
+		String n1 = System.console().readLine("%12s%-12s  [50] : ", " ", "Notes");
+		String n2 = System.console().readLine("%12s%-12s  [50] : ", " ", "");
+		String n3 = System.console().readLine("%12s%-12s  [50] : ", " ", "");
 
-		Entry e = new Entry(name, un, pw.toCharArray(), no);
+		Entry e = new Entry(name, un, pw.toCharArray(), n1.substring(0, Math.min(50, n1.length())) +
+				System.lineSeparator() +
+				n2.substring(0, Math.min(50, n2.length())) +
+				System.lineSeparator() +
+				n3.substring(0, Math.min(50, n3.length())));
 
 		if (cmd.equals(Command.UPDATE)) {
 			dataStore.updateEntry(e);
@@ -68,9 +74,11 @@ public class EntryTask implements Task {
 	}
 
 	private void delete(String name) throws Exception {
-		String confirm = System.console().readLine("%11s%-18s : ", " ", "Are you sure want to delete the entry (y/n)?");
+		String confirm = System.console().readLine("%12s%-18s : ", " ", "Are you sure want to delete the entry (y/n)?");
 		if (confirm.equalsIgnoreCase("y")) {
-			DataStore.getInstance().deleteEntry(name);
+			if(DataStore.getInstance().deleteEntry(name)) {
+				Util.println("Deleted successfully");
+			}
 		}
 	}
 }

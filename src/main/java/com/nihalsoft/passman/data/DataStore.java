@@ -7,9 +7,8 @@ import com.nihalsoft.passman.model.MetaData;
 
 import java.io.IOException;
 import java.nio.file.Path;
-import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
+import java.util.function.Consumer;
 
 public class DataStore {
 
@@ -18,6 +17,7 @@ public class DataStore {
 	private Map<String, Integer> indexMap;
 	private String fileName;
 	private char[] password;
+	private int securityPin;
 
 	private DataStore() {
 	}
@@ -41,7 +41,7 @@ public class DataStore {
 		return fileName;
 	}
 
-	public void create(String fileName, char[] password) throws Exception {
+	public void create(String fileName, char[] password, int securityPin) throws Exception {
 
 		if (Path.of(fileName).toFile().exists()) {
 			throw new Exception("File already exists");
@@ -49,38 +49,38 @@ public class DataStore {
 
 		this.fileName = fileName;
 		this.password = password;
+		this.securityPin = securityPin;
 
-		try (var file = openFile("rw")) {
+		try (var file = openFileForWrite()) {
 			indexMap = new LinkedHashMap<>();
 			file.create();
-			Util.println(fileName + " created successfully");
 		} catch (Exception e) {
 			throw new RuntimeException(e);
 		}
 	}
 
-	public void load(String fileName, char[] password) throws Exception {
+	public void load(String fileName, char[] password, int securityPin) throws Exception {
 		if (this.fileName != null && fileName.equalsIgnoreCase(this.fileName.toLowerCase())) {
 			throw new Exception("File already loaded");
 		}
 
 		this.fileName = fileName;
 		this.password = password;
+		this.securityPin = securityPin;
 
-		try (var file = openFile("rw")) {
+		try (var file = openFileForRead()) {
 
 			indexMap = new LinkedHashMap<>();
-			int totalEntries = 0;
+			int i = 0;
 
+			var ep = EntryParser.getInstance();
 			while (file.hasNext()) {
 				byte[] rowData = file.next();
-				if (rowData[0] != 0) {
-					indexMap.put(EntryParser.getInstance().getName(rowData), totalEntries);
+				if (!ep.isDeleted(rowData)) {
+					indexMap.put(ep.getName(rowData), i);
 				}
-				totalEntries++;
+				i++;
 			}
-
-			Util.println(indexMap.size() + " - Entries Loaded");
 
 		} catch (Exception e) {
 			this.close();
@@ -101,7 +101,7 @@ public class DataStore {
 		if (indexMap.containsKey(entry.getName())) {
 			throw new RuntimeException("Entry already exist");
 		}
-		try (var file = openFile("rw")) {
+		try (var file = openFileForWrite()) {
 			file.write(entry);
 			indexMap.put(entry.getName(), indexMap.size());
 		}
@@ -110,25 +110,25 @@ public class DataStore {
 	public void updateEntry(Entry entry) throws Exception {
 		checkEntryAvailability(entry.getName());
 		//TODO: Trim ?
-		try (var file = openFile("rw")) {
+		try (var file = openFileForWrite()) {
 			file.write(entry, indexMap.get(entry.getName()));
 		}
 	}
 
 
-	public void deleteEntry(String name) throws Exception {
+	public boolean deleteEntry(String name) throws Exception {
 		checkEntryAvailability(name);
-		try (var file = openFile("rw")) {
+		try (var file = openFileForWrite()) {
 			byte[] data = new byte[Entry.SIZE];
 			file.write(data, indexMap.get(name));
 			indexMap.remove(name);
-			Util.println("Deleted successfully");
 		}
+		return true;
 	}
 
 	public void rename(String name, String newName) throws Exception {
 		checkEntryAvailability(name);
-		try (var file = openFile("rw")) {
+		try (var file = openFileForWrite()) {
 			int idx = indexMap.get(name);
 			byte[] rowData = file.get(idx);
 			System.arraycopy(newName.getBytes(), 0, rowData, 0, newName.length());
@@ -140,18 +140,25 @@ public class DataStore {
 	}
 
 	public Entry getEntry(String name) {
+		return getEntry(name, -1);
+	}
+
+	public Entry getEntry(String name, int securityPin) {
 		if (!indexMap.containsKey(name)) {
 			throw new RuntimeException("Entry not found");
 		}
-		try (var file = openFile("rw")) {
-			return file.getEntry(indexMap.get(name));
+		try (var file = openFileForRead()) {
+			int idx = indexMap.get(name);
+			return (securityPin == -1) ?
+					file.getEntry(idx) :
+					file.getEntry(idx, securityPin);
 		} catch (Exception e) {
 			throw new RuntimeException(e);
 		}
 	}
 
 	public void purge() {
-		try (var file = openFile("rw")) {
+		try (var file = openFileForWrite()) {
 			file.purge();
 			int counter = 0;
 			indexMap = new LinkedHashMap<>();
@@ -164,13 +171,46 @@ public class DataStore {
 		}
 	}
 
+	public List<Map<String, Object>> getEntryList() {
+		var list = new ArrayList<Map<String, Object>>();
+
+		try (var file = openFileForRead()) {
+			if (file.getTotalRecords() == 0) {
+				return list;
+			}
+			Map<String, Object> map;
+			var ep = EntryParser.getInstance();
+			while (file.hasNext()) {
+				byte[] data = file.next();
+				if (ep.isDeleted(data)) {
+					continue;
+				}
+				map = new HashMap<>();
+				map.put("name", ep.getName(data));
+				map.put("updatedTime", ep.getUpdatedTime(data));
+				list.add(map);
+			}
+			return list;
+		} catch (Exception e) {
+			throw new RuntimeException(e);
+		}
+	}
+
 	public Set<String> getEntryNames() {
 		return indexMap.keySet();
 	}
 
-	public void resetPassword(char[] password) throws IOException {
-		try (var file = openFile("rw")) {
-			file.resetPassword(password);
+	public long getTotalRecords() throws IOException {
+		try (var file = openFileForRead()) {
+			return file.getTotalRecords();
+		}
+	}
+
+	public void resetPassword(char[] password, int securityPin, Consumer<Integer> consumer) throws IOException {
+		try (var file = openFileForWrite()) {
+			file.resetPassword(password, securityPin, consumer);
+			this.password = password;
+			this.securityPin = securityPin;
 		}
 	}
 
@@ -188,7 +228,7 @@ public class DataStore {
 	public Map<String, Object> getFileInfo() {
 		int delEntries = 0;
 		int totalEntries = 0;
-		try (var file = openFile("rw")) {
+		try (var file = openFileForRead()) {
 			while (file.hasNext()) {
 				byte[] rowData = file.next();
 				if (rowData[0] == 0) {
@@ -208,7 +248,12 @@ public class DataStore {
 		}
 	}
 
-	public EntryFile openFile(String mode) throws IOException {
-		return new EntryFile(this.fileName, mode, this.password);
+	private EntryFile openFileForRead() throws IOException {
+		return new EntryFile(this.fileName, "r", this.password, this.securityPin);
 	}
+
+	private EntryFile openFileForWrite() throws IOException {
+		return new EntryFile(this.fileName, "rw", this.password, this.securityPin);
+	}
+
 }

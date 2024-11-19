@@ -1,6 +1,5 @@
 package com.nihalsoft.passman.data;
 
-import com.nihalsoft.passman.AESUtil;
 import com.nihalsoft.passman.EntryParser;
 import com.nihalsoft.passman.model.Entry;
 import com.nihalsoft.passman.model.MetaData;
@@ -8,7 +7,8 @@ import com.nihalsoft.passman.model.MetaData;
 import javax.crypto.BadPaddingException;
 import java.io.IOException;
 import java.io.RandomAccessFile;
-import java.util.Arrays;
+import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 public class EntryFile extends RandomAccessFile implements AutoCloseable {
 
@@ -16,20 +16,19 @@ public class EntryFile extends RandomAccessFile implements AutoCloseable {
 	private long totalRecords = 0;
 	private MetaData metaData;
 
-	public EntryFile(String fileName, String mode, char[] password) throws IOException {
+	public EntryFile(String fileName, String mode, char[] password, int securityPin) throws IOException {
 
 		super(fileName, mode);
 
 		if (this.length() == 0) {
-			this.metaData = new MetaData(password);
+			this.metaData = new MetaData(password, securityPin);
 			return;
 		}
 
 		try {
 
 			totalRecords = (this.length() - MetaData.SIZE) / Entry.SIZE;
-			byte[] dec = AESUtil.decrypt(getMetadataBytes(), password);
-			this.metaData = new MetaData(password, Arrays.copyOfRange(dec, 0, 16), Arrays.copyOfRange(dec, 16, 28));
+			this.metaData = EntryParser.getInstance().decryptMetaData(getMetadataBytes(), password, securityPin);
 
 		} catch (Exception e) {
 			if (e instanceof BadPaddingException) {
@@ -56,9 +55,16 @@ public class EntryFile extends RandomAccessFile implements AutoCloseable {
 	}
 
 	public Entry nextEntry() throws IOException {
-		Entry e = EntryParser.getInstance().toEntry(get(index), metaData);
+		Entry e = getEntry(index);
 		index++;
 		return e;
+	}
+
+	public Entry nextEntry(int securityPin) throws IOException {
+		Entry e = getEntry(index, securityPin);
+		index++;
+		return e;
+
 	}
 
 	public MetaData getMetadata() throws IOException {
@@ -76,6 +82,14 @@ public class EntryFile extends RandomAccessFile implements AutoCloseable {
 		return EntryParser.getInstance().toEntry(get(index), metaData);
 	}
 
+	public Entry getEntry(long index, int securityPin) throws IOException {
+		if (securityPin != this.metaData.getSecurityPin()) {
+			throw new RuntimeException("Invalid security pin");
+		}
+		byte[] bytes = get(index);
+		return EntryParser.getInstance().toEntry(bytes, metaData, true);
+	}
+
 	public byte[] get(long index) throws IOException {
 		this.seek(getPos(index));
 		byte[] rowData = new byte[Entry.SIZE];
@@ -90,14 +104,14 @@ public class EntryFile extends RandomAccessFile implements AutoCloseable {
 		this.write(bytes);
 	}
 
-	public void write(Entry entry, int pos) throws IOException {
+	public void write(Entry entry, long pos) throws IOException {
 		byte[] bytes = EntryParser.getInstance().toBytes(entry, metaData);
 		this.seek(getPos(pos));
 		this.write(bytes);
 		this.totalRecords++;
 	}
 
-	public void write(byte[] entry, int pos) throws IOException {
+	public void write(byte[] entry, long pos) throws IOException {
 		this.seek(getPos(pos));
 		this.write(entry);
 	}
@@ -141,25 +155,32 @@ public class EntryFile extends RandomAccessFile implements AutoCloseable {
 		this.seek(0);
 	}
 
-	public void resetPassword(char[] password) throws IOException {
+	public void resetPassword(char[] password, int securityPin) throws IOException {
+		this.resetPassword(password, securityPin, null);
+	}
+
+	public void resetPassword(char[] password, int securityPin, Consumer<Integer> consumer) throws IOException {
 		int idx = 0;
-		var md = new MetaData(password);
+		var md = new MetaData(password, securityPin);
 		var ep = EntryParser.getInstance();
+		moveFirst();
 		while (this.hasNext()) {
-			Entry entry = this.nextEntry();
+			Entry entry = this.nextEntry(metaData.getSecurityPin());
 			if (entry != null) {
 				this.write(ep.toBytes(entry, md), idx);
+				if (consumer != null) {
+					consumer.accept(idx);
+				}
 			}
 			idx++;
 		}
 		this.seek(0);
-		this.write(EntryParser.getInstance().encryptMetaData(metaData));
+		this.write(ep.encryptMetaData(md));
 		this.metaData = md;
 		this.moveFirst();
 	}
 
-	@Override
-	public void close() throws IOException {
-		super.close();
+	public long getTotalRecords() throws IOException {
+		return (this.length() - MetaData.SIZE) / Entry.SIZE;
 	}
 }

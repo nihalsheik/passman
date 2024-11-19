@@ -2,19 +2,21 @@ package com.nihalsoft.passman.model;
 
 public class Entry {
 
-	// userName (30), password (30), notes (100) = 160 + 16 = 176 + name (20) = 196
-	public static final int SIZE = 196;
+	// name (20), updatedTime(8), userName (30), password (30), notes (150) + padding 16 + 16 = 32
+	public static final int SIZE = 270;
 
 	private String name;
 	private String userName;
 	private char[] password;
 	private String notes;
+	private long updatedTime;
 
 	public Entry(String name, String userName, char[] password, String notes) {
 		this.name = name;
 		this.userName = userName;
 		this.password = password;
 		this.notes = notes;
+		this.updatedTime = System.currentTimeMillis();
 	}
 
 	public String getName() {
@@ -47,6 +49,14 @@ public class Entry {
 
 	public void setNotes(String notes) {
 		this.notes = notes;
+	}
+
+	public long getUpdatedTime() {
+		return updatedTime;
+	}
+
+	public void setUpdatedTime(long updatedTime) {
+		this.updatedTime = updatedTime;
 	}
 
 }

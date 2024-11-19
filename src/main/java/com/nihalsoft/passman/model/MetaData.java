@@ -6,14 +6,16 @@ import java.security.SecureRandom;
 public class MetaData {
 
 	private final char[] password;
+	private int securityPin = 0;
 	private final byte[] salt;
 	private final byte[] iv;
 
 	public static final int SIZE = 1024;
 
-	public MetaData(char[] password) {
+	public MetaData(char[] password, int securityPin) {
 
 		this.password = password;
+		this.securityPin = securityPin;
 
 		var secRand = new SecureRandom();
 		this.salt = new byte[16];
@@ -23,14 +25,23 @@ public class MetaData {
 		secRand.nextBytes(iv);
 	}
 
-	public MetaData(char[] password, byte[] salt, byte[] iv) {
+	public MetaData(char[] password, int securityPin, byte[] salt, byte[] iv) {
 		this.password = password;
 		this.salt = salt;
 		this.iv = iv;
+		this.securityPin = securityPin;
 	}
 
 	public char[] getPassword() {
 		return password;
+	}
+
+	public int getSecurityPin() {
+		return securityPin;
+	}
+
+	public void setSecurityPin(int securityPin) {
+		this.securityPin = securityPin;
 	}
 
 	public byte[] getSalt() {

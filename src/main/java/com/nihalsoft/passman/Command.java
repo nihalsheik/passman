@@ -22,6 +22,8 @@ public enum Command {
 
 	GET(true),
 
+	GETPASS(true),
+
 	DELETE(true),
 
 	RENAME(true),
