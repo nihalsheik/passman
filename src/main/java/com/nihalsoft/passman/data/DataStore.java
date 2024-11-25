@@ -129,9 +129,11 @@ public class DataStore {
 	public void rename(String name, String newName) throws Exception {
 		checkEntryAvailability(name);
 		try (var file = openFileForWrite()) {
+			byte[] newNameBytes = new byte[20];
+			System.arraycopy(newName.getBytes(), 0, newNameBytes, 0, newName.length());
 			int idx = indexMap.get(name);
 			byte[] rowData = file.get(idx);
-			System.arraycopy(newName.getBytes(), 0, rowData, 0, newName.length());
+			System.arraycopy(newNameBytes, 0, rowData, 0, 20);
 			file.write(rowData, idx);
 			indexMap.remove(name);
 			indexMap.put(newName, idx);

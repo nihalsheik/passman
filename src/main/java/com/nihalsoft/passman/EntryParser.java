@@ -50,22 +50,19 @@ public class EntryParser {
 	}
 
 	private String decryptPassword(byte[] data, MetaData metaData) throws Exception {
-
 		byte[] dec = AESUtil.decrypt(
-				Arrays.copyOfRange(data, 28, 74),
-				getCombinedPassword(metaData.getPassword(), metaData.getSecurityPin()),
+				Arrays.copyOfRange(data, 30, 76),
+				Integer.valueOf(metaData.getSecurityPin()).toString().toCharArray(),
 				metaData.getSalt(),
 				metaData.getIv()
 		);
-
 		return new String(dec, StandardCharsets.UTF_8).trim();
 	}
 
 	private byte[] encryptPassword(char[] password, MetaData metaData) throws Exception {
-		// 30 + 16 = 46 bytes
 		return AESUtil.encrypt(
 				ByteBuffer.allocate(30).put(new String(password).getBytes()).array(),
-				getCombinedPassword(metaData.getPassword(), metaData.getSecurityPin()),
+				Integer.valueOf(metaData.getSecurityPin()).toString().toCharArray(),
 				metaData.getSalt(),
 				metaData.getIv()
 		);
@@ -82,18 +79,19 @@ public class EntryParser {
 				return null;
 			}
 			byte[] dec = AESUtil.decrypt(
-					Arrays.copyOfRange(data, 74, data.length),
+					Arrays.copyOfRange(data, 28, data.length),
 					metaData.getPassword(),
 					metaData.getSalt(),
 					metaData.getIv()
 			);
 
 			byte[] bytes = ByteBuffer.allocate(dec.length + 20)
-					.put(Arrays.copyOfRange(data, 0, 20))
-					.put(20, dec)
+					.put(Arrays.copyOfRange(data, 0, 20)) // Name
+					.put(Arrays.copyOfRange(dec, 0, 30)) // Username
+					.put(Arrays.copyOfRange(dec, 76, dec.length)) // notes
 					.array();
 
-			String pwd = includePassword ? decryptPassword(data, metaData) : "";
+			String pwd = includePassword ? decryptPassword(dec, metaData) : "";
 			String str = new String(bytes, StandardCharsets.UTF_8);
 			Entry e = new Entry(str.substring(0, 20).trim(),
 					str.substring(20, 50).trim(),
@@ -119,13 +117,14 @@ public class EntryParser {
 
 			byte[] pwd = encryptPassword(entry.getPassword(), metaData);
 
-			byte[] data = ByteBuffer.allocate(180)
+			byte[] data = ByteBuffer.allocate(226)
 					.put(entry.getUserName().getBytes())
-					.put(30, entry.getNotes().getBytes())
+					.put(30, pwd)
+					.put(76, entry.getNotes().getBytes())
 					.array();
 
-			// 30 + 150 + 16 = 196 bytes
-			byte[] enc = AESUtil.encrypt(data,
+			// 226 + 16 = 242 bytes
+			byte[] encData = AESUtil.encrypt(data,
 					metaData.getPassword(),
 					metaData.getSalt(),
 					metaData.getIv()
@@ -135,8 +134,7 @@ public class EntryParser {
 			return ByteBuffer.allocate(Entry.SIZE)
 					.put(entry.getName().getBytes())
 					.putLong(20, entry.getUpdatedTime())
-					.put(28, pwd)
-					.put(74, enc)
+					.put(28, encData)
 					.array();
 
 		} catch (Exception e) {

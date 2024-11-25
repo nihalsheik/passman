@@ -10,7 +10,7 @@ import java.util.Map;
 
 public class Main {
 
-	private Map<String, Object> commands;
+	private final Map<String, Object> commands;
 
 	public Main() {
 		commands = new HashMap<>();
